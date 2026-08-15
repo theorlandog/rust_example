@@ -1,0 +1,24 @@
+# Example configuration for rust-example.
+#
+# Copy this to the path reported by `rust-example -v config`:
+#
+#   Linux    ~/.config/rust-example/config.toml   ($XDG_CONFIG_HOME is honoured)
+#   macOS    ~/Library/Application Support/rust-example/config.toml
+#   Windows  %APPDATA%\rust-example\config.toml
+#
+# Every key is optional. A key that is absent falls back to the built-in
+# default; a key that is present is overridden by the matching environment
+# variable or command line flag. Unknown keys are an error, so a typo is
+# reported rather than silently ignored.
+
+# Who to greet.
+#   default: "world"   env: RUST_EXAMPLE_NAME   flag: --name
+name = "world"
+
+# How many times to print the greeting, from 1 to 100.
+#   default: 1         env: RUST_EXAMPLE_REPEAT flag: --repeat
+repeat = 1
+
+# Whether to shout the greeting in uppercase.
+#   default: false                              flag: --shout / --no-shout
+shout = false

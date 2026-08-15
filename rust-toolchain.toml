@@ -1,0 +1,11 @@
+# Everyone who builds this repository gets the same toolchain, with the two
+# components CI checks. Without this, `cargo fmt` fails on a machine that
+# installed Rust with the minimal profile, and the formatting check becomes
+# something only CI can run.
+#
+# `channel = "stable"` tracks the current release. Pin an exact version
+# ("1.85.0") instead when a build has to be byte-for-byte reproducible; the
+# cost is a pull request every six weeks to move it forward.
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

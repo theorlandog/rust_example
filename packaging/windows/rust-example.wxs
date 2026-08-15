@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Windows installer definition, built with the WiX Toolset v5.
+
+  Built by packaging/windows/build-msi.ps1, which supplies the preprocessor
+  variables referenced below with `wix build -d Name=Value`.
+
+  Three things this arranges that a bare "copy the .exe somewhere" does not:
+    * an entry in Add/Remove Programs, with a working uninstaller;
+    * upgrades that replace the previous version instead of installing beside
+      it (MajorUpgrade, keyed on UpgradeCode);
+    * the install directory on the system PATH, so the command works in a shell
+      opened after installation.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+    <!--
+      UpgradeCode identifies the *product line* rather than this build. It must
+      stay the same across every release: it is how Windows recognises that
+      0.3.0 supersedes 0.2.0. Generate a new one for your own project
+      (`uuidgen`), and never reuse another project's.
+    -->
+    <Package
+        Name="rust-example"
+        Manufacturer="theorlandog"
+        Version="$(var.Version)"
+        Language="1033"
+        Scope="perMachine"
+        Compressed="yes"
+        InstallerVersion="500"
+        UpgradeCode="5a6bd837-34e9-4675-b703-73ac5a7f6552">
+
+        <SummaryInformation Description="A reference example of a modern Rust CLI" />
+
+        <!-- Uninstall the older version before installing this one. -->
+        <MajorUpgrade DowngradeErrorMessage="A newer version of [ProductName] is already installed. Uninstall it first to install this version." />
+
+        <!-- Embed the payload in the .msi so there is a single file to ship. -->
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- Shown in Add/Remove Programs. -->
+        <Property Id="ARPURLINFOABOUT" Value="https://github.com/theorlandog/rust_example" />
+        <Property Id="ARPNOREPAIR" Value="1" />
+
+        <StandardDirectory Id="ProgramFiles64Folder">
+            <Directory Id="INSTALLFOLDER" Name="rust-example">
+
+                <Component Id="Executable">
+                    <File Id="RustExampleExe"
+                          Name="rust-example.exe"
+                          Source="$(var.ExePath)"
+                          KeyPath="yes" />
+                </Component>
+
+                <Component Id="Documentation">
+                    <File Id="LicenseTxt" Name="LICENSE.txt" Source="$(var.LicensePath)" KeyPath="yes" />
+                    <File Id="ConfigExample" Name="config.example.toml" Source="$(var.ConfigExamplePath)" />
+                </Component>
+
+                <!-- Adding to PATH needs a component of its own: an Environment
+                     element cannot be the key path, so a registry value stands
+                     in as the thing Windows checks to decide the component is
+                     installed. Part="last" appends rather than replacing, and
+                     Permanent="no" means uninstalling removes the entry. -->
+                <Component Id="PathEntry">
+                    <Environment Id="AddToPath"
+                                 Name="PATH"
+                                 Value="[INSTALLFOLDER]"
+                                 Action="set"
+                                 Part="last"
+                                 System="yes"
+                                 Permanent="no" />
+                    <RegistryValue Root="HKLM"
+                                   Key="Software\theorlandog\rust-example"
+                                   Name="InstallFolder"
+                                   Type="string"
+                                   Value="[INSTALLFOLDER]"
+                                   KeyPath="yes" />
+                </Component>
+
+            </Directory>
+        </StandardDirectory>
+
+        <Feature Id="Main" Title="rust-example" Level="1">
+            <ComponentRef Id="Executable" />
+            <ComponentRef Id="Documentation" />
+            <ComponentRef Id="PathEntry" />
+        </Feature>
+
+        <!-- A licence pane, a directory chooser, and a progress bar.
+             Requires `wix extension add -g WixToolset.UI.wixext`. -->
+        <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+        <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtfPath)" />
+
+    </Package>
+</Wix>
