@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch makes the running check obsolete. Cancelling it
+# saves runner minutes and gets the useful answer sooner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Warnings fail the build here, but not on a developer's machine, where a
+  # warning mid-refactor should not block `cargo test`.
+  RUSTFLAGS: -D warnings
+  # Incremental compilation costs time and disk space and buys nothing on a
+  # runner that starts from a clean checkout every time.
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  lint:
+    name: Format, lints, and docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # rustup is preinstalled on GitHub runners, so no action is needed to
+      # install a toolchain -- one fewer dependency to keep current.
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt,clippy
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: lint-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - run: cargo fmt --all --check
+
+      # --all-targets covers tests and examples, which is where lint debt hides.
+      - run: cargo clippy --all-targets --all-features --locked
+
+      # Broken intra-doc links and undocumented public items are build failures
+      # here, which is what makes `missing_docs` in Cargo.toml worth declaring.
+      - run: cargo doc --no-deps --all-features --locked
+
+  test:
+    name: Test on ${{ matrix.os }}
+    strategy:
+      # One platform failing should not hide the result on the others.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: test-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      # --locked fails if Cargo.lock is out of date rather than quietly
+      # updating it, so CI tests the dependency versions that were reviewed.
+      - run: cargo test --all-features --locked
+
+  msrv:
+    name: Minimum supported Rust version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      # Keep this in step with `rust-version` in Cargo.toml. Without this job
+      # that field is a claim nobody checks, and it breaks the moment a
+      # dependency update raises its own minimum.
+      - name: Install Rust 1.85
+        run: rustup toolchain install 1.85 --profile minimal
+
+      - run: cargo +1.85 check --all-targets --all-features --locked
+
+  package:
+    name: Linux packages
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install Rust
+        run: rustup toolchain install stable --profile minimal
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: package-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+
+      # --locked pins the packagers themselves, so a new release of either
+      # cannot change what this repository ships without a commit saying so.
+      - name: Install the packaging tools
+        run: cargo install cargo-deb cargo-generate-rpm --locked
+
+      # Packaging breaks in ways compiling does not: a renamed file, a moved
+      # asset, a metadata key that no longer parses. Building the packages on
+      # every pull request finds that on the pull request, not on release day.
+      - run: ./packaging/linux/build-packages.sh
+
+      # A package that installs but does not run is a package that shipped
+      # broken, so install it here and run the installed copy.
+      - name: Install the .deb and run it
+        run: |
+          sudo dpkg --install dist/*.deb
+          test "$(rust-example --name CI)" = "Hello, CI!"
+          sudo dpkg --remove rust-example
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: dist/
+          retention-days: 7

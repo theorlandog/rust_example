@@ -1,8 +1,114 @@
 [package]
 name = "rust_example"
-version = "0.1.0"
-edition = "2021"
+version = "0.2.0"
+edition = "2024"
+# The oldest toolchain this crate is tested against. `cargo` refuses to build
+# with anything older, which turns "works on my machine" into a build error.
+rust-version = "1.85"
+description = "A reference example of a modern Rust CLI: argument parsing, layered configuration, and native installers."
+authors = ["theorlandog"]
+license = "BSD-2-Clause"
+readme = "README.md"
+repository = "https://github.com/theorlandog/rust_example"
+keywords = ["cli", "example", "reference", "clap"]
+categories = ["command-line-utilities"]
+# Nothing here is meant for crates.io; remove this to publish.
+publish = false
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# Crate names use underscores, but CLI binaries conventionally use hyphens.
+# Declaring the binary explicitly lets the library stay `rust_example` (so
+# `use rust_example::...` works) while the installed command is `rust-example`.
+[[bin]]
+name = "rust-example"
+path = "src/main.rs"
 
+[lib]
+name = "rust_example"
+path = "src/lib.rs"
+
+# Every dependency here earns its place. See "Dependencies" in README.md for
+# the reasoning, and for the standard-library alternatives used instead of the
+# usual suspects (anyhow, thiserror, directories, assert_cmd, ...).
 [dependencies]
+# Argument parsing, help text, env-var fallbacks, and shell completion data.
+clap = { version = "4.5", features = ["derive", "env", "wrap_help"] }
+# Completion script generation. Separate crate so non-completing builds stay lean.
+clap_complete = "4.5"
+# Deriving `Deserialize` for the config struct.
+serde = { version = "1.0", features = ["derive"] }
+# The config file format. TOML is what Rust developers already read and write.
+toml = { version = "1.1", default-features = false, features = ["parse", "display", "serde", "std"] }
+
+[lints.rust]
+# Public items in the library must be documented; the compiler enforces it.
+missing_docs = "warn"
+unsafe_code = "forbid"
+
+[lints.clippy]
+# `cargo clippy` denies these in CI. Pedantic catches real papercuts in CLI code.
+pedantic = { level = "warn", priority = -1 }
+# The binary reports errors itself; a panicking unwrap is a bug, not a shortcut.
+unwrap_used = "warn"
+expect_used = "warn"
+
+[profile.release]
+# Cross-crate inlining. "thin" gets most of "fat" LTO's win for a fraction of
+# the link time; switch to `true` if you care more about bytes than CI minutes.
+lto = "thin"
+# One codegen unit per crate: slower builds, better optimization.
+codegen-units = 1
+# Drop symbols from the shipped binary. Packagers expect stripped binaries, and
+# `cargo-generate-rpm` errors out on a debug-heavy one.
+strip = "symbols"
+
+# ---------------------------------------------------------------------------
+# Packaging metadata
+#
+# The Linux packages are described declaratively right here, so `cargo deb` and
+# `cargo generate-rpm` need no separate spec files. macOS and Windows need real
+# toolchains (pkgbuild, WiX) and live under packaging/. See packaging/README.md.
+# ---------------------------------------------------------------------------
+
+# `cargo install cargo-deb && cargo deb` -> target/debian/rust-example_0.2.0-1_amd64.deb
+[package.metadata.deb]
+name = "rust-example"
+maintainer = "theorlandog <jamie@theorlandog.com>"
+copyright = "2023, theorlandog"
+license-file = ["LICENSE", "0"]
+extended-description = """\
+rust-example is a small hello-world command line tool that exists to demonstrate \
+how a modern Rust CLI is laid out: clap-based argument parsing, a layered \
+configuration system (defaults < config file < environment < flags), and native \
+installers for Debian, RPM, macOS, and Windows."""
+section = "utils"
+priority = "optional"
+# "$auto" asks cargo-deb to read the binary's ELF headers and derive the libc
+# dependency, instead of guessing a version by hand.
+depends = "$auto"
+assets = [
+    ["target/release/rust-example", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/rust-example/README.md", "644"],
+    ["packaging/config.example.toml", "usr/share/doc/rust-example/config.example.toml", "644"],
+    ["target/completions/rust-example.bash", "usr/share/bash-completion/completions/rust-example", "644"],
+    ["target/completions/_rust-example", "usr/share/zsh/vendor-completions/_rust-example", "644"],
+    ["target/completions/rust-example.fish", "usr/share/fish/vendor_completions.d/rust-example.fish", "644"],
+]
+
+# `cargo install cargo-generate-rpm && cargo generate-rpm` -> target/generate-rpm/*.rpm
+[package.metadata.generate-rpm]
+name = "rust-example"
+summary = "A reference example of a modern Rust CLI"
+# RPM's own license identifiers; SPDX is accepted by current rpm versions.
+license = "BSD-2-Clause"
+# "builtin" reads the ELF headers in-process, so the RPM can be built on a
+# machine that has no rpm tooling installed (a plain Ubuntu CI runner).
+auto-req = "builtin"
+assets = [
+    { source = "target/release/rust-example", dest = "/usr/bin/rust-example", mode = "755" },
+    { source = "LICENSE", dest = "/usr/share/doc/rust-example/LICENSE", mode = "644", doc = true },
+    { source = "README.md", dest = "/usr/share/doc/rust-example/README.md", mode = "644", doc = true },
+    { source = "packaging/config.example.toml", dest = "/usr/share/doc/rust-example/config.example.toml", mode = "644", doc = true },
+    { source = "target/completions/rust-example.bash", dest = "/usr/share/bash-completion/completions/rust-example", mode = "644" },
+    { source = "target/completions/_rust-example", dest = "/usr/share/zsh/site-functions/_rust-example", mode = "644" },
+    { source = "target/completions/rust-example.fish", dest = "/usr/share/fish/vendor_completions.d/rust-example.fish", mode = "644" },
+]

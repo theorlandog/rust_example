@@ -1,0 +1,5 @@
+# `unwrap()` and `expect()` are denied in `src/`, but a test that cannot
+# unwrap is a test that hides its own failures behind extra ceremony.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true

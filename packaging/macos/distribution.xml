@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The installer UI for the .pkg, consumed by productbuild.
+
+  It wraps the component package built by pkgbuild (component.pkg) and adds the
+  things a component package cannot express on its own: the window title, the
+  licence pane, and which architectures the payload supports.
+-->
+<installer-gui-script minSpecVersion="2">
+    <title>rust-example</title>
+    <organization>com.theorlandog</organization>
+
+    <!-- Install for all users, into /usr/local/bin. -->
+    <domains enable_anywhere="false" enable_currentUserHome="false" enable_localSystem="true"/>
+
+    <!-- The payload is a universal binary, so both architectures are offered.
+         Omitting this attribute makes Installer assume x86_64 only, and the
+         package is then refused on Apple silicon that has no Rosetta. -->
+    <options customize="never" require-scripts="false" hostArchitectures="arm64,x86_64"/>
+
+    <!-- Resolved against productbuild's resources directory. -->
+    <license file="LICENSE" mime-type="text/plain"/>
+
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.theorlandog.rust-example"/>
+        </line>
+    </choices-outline>
+
+    <choice id="default"/>
+    <choice id="com.theorlandog.rust-example" visible="false">
+        <pkg-ref id="com.theorlandog.rust-example"/>
+    </choice>
+
+    <!-- The file name here is relative to productbuild's package path. -->
+    <pkg-ref id="com.theorlandog.rust-example">component.pkg</pkg-ref>
+</installer-gui-script>
